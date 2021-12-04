@@ -14,41 +14,20 @@ func main() {
 	if err != nil {
 		log.Fatalln("Error while reading the diagnostics with errors: ", err)
 	}
-	if !isStructureCorrect(diagnostics) {
-		log.Fatalln("Diagnostic do not have the same size!")
-	}
-	gammaRateInBinary, err := calculateGammaRateInBinaryForm(diagnostics)
-	if err != nil {
-		log.Fatalln("Error while calculating Gamma Rate in binary form with errors: ", err)
-	}
-	epsilonRateInBinary, err := calculateEpsilonRateInBinaryForm(gammaRateInBinary)
-	if err != nil {
-		log.Fatalln("Error while calculating Epsilon Rate in binary form with errors: ", err)
-	}
-	fmt.Printf("Gamma Binary: %s, Epsilon Binary: %s\n", gammaRateInBinary, epsilonRateInBinary)
-	gammaRateInDecimal, err := strconv.ParseInt(gammaRateInBinary, 2, 64)
-	if err != nil {
-		log.Fatalln("Error while converting gamma rate to decimal form with errors: ", err)
-	}
-	epsilonRateInDecimal, err := strconv.ParseInt(epsilonRateInBinary, 2, 64)
-	if err != nil {
-		log.Fatalln("Error while converting epsilon rate to decimal form with errors: ", err)
-	}
-	fmt.Printf("Gamma rate: %d, Epsilon rate: %d\n", gammaRateInDecimal, epsilonRateInDecimal)
-	fmt.Printf("And their multiplication = %d\n", gammaRateInDecimal*epsilonRateInDecimal)
-}
 
-func isStructureCorrect(diagnostics [][]int) bool {
-	if len(diagnostics) == 0 {
-		return true
+	gammaRate, epsilonRate, err := calculateGammaAndEpsilonRates(diagnostics)
+	if err != nil {
+		log.Fatalln("Error while generating gamma and epsilon rates with errors: ", err)
 	}
-	firstDiagnosticLen := len(diagnostics[0])
-	for i := 0; i < len(diagnostics); i++ {
-		if len(diagnostics[i]) != firstDiagnosticLen {
-			return false
-		}
+	fmt.Printf("Gamma rate: %d, Epsilon rate: %d\n", gammaRate, epsilonRate)
+	fmt.Printf("And their multiplication = %d\n", gammaRate*epsilonRate)
+
+	oxygenRating, co2Rating, err := calculateOxygenAndCo2Rating(diagnostics)
+	if err != nil {
+		log.Fatalln("Error while calculating oxygen and co2 rating with errors: ", err)
 	}
-	return true
+	fmt.Printf("Oxygen rate: %d, Co2 rate: %d\n", oxygenRating, co2Rating)
+	fmt.Printf("And their multiplication = %d\n", oxygenRating*co2Rating)
 }
 
 func readDiagnostics(path string) ([][]int, error) {
@@ -67,7 +46,41 @@ func readDiagnostics(path string) ([][]int, error) {
 		}
 		diagnostics = append(diagnostics, numberAsTable)
 	}
+	return checkDiagnosticStructure(diagnostics)
+}
+
+func checkDiagnosticStructure(diagnostics [][]int) ([][]int, error) {
+	if len(diagnostics) == 0 {
+		return diagnostics, nil
+	}
+	firstDiagnosticLen := len(diagnostics[0])
+	for i := 0; i < len(diagnostics); i++ {
+		if len(diagnostics[i]) != firstDiagnosticLen {
+			return nil, errors.New("diagnostic do not have the same size")
+		}
+	}
 	return diagnostics, nil
+}
+
+func calculateGammaAndEpsilonRates(diagnostics [][]int) (int64, int64, error) {
+	gammaRateInBinary, err := calculateGammaRateInBinaryForm(diagnostics)
+	if err != nil {
+		return -2000, -2000, err
+	}
+	epsilonRateInBinary, err := calculateEpsilonRateInBinaryForm(gammaRateInBinary)
+	if err != nil {
+		return -2000, -2000, err
+	}
+	fmt.Printf("Gamma Binary: %s, Epsilon Binary: %s\n", gammaRateInBinary, epsilonRateInBinary)
+	gammaRateInDecimal, err := strconv.ParseInt(gammaRateInBinary, 2, 64)
+	if err != nil {
+		return -2000, -2000, err
+	}
+	epsilonRateInDecimal, err := strconv.ParseInt(epsilonRateInBinary, 2, 64)
+	if err != nil {
+		return -2000, -2000, err
+	}
+	return gammaRateInDecimal, epsilonRateInDecimal, nil
 }
 
 func transformStringToIntTableInBinary(line string) ([]int, error) {
@@ -85,27 +98,46 @@ func transformStringToIntTableInBinary(line string) ([]int, error) {
 func calculateGammaRateInBinaryForm(diagnostics [][]int) (string, error) {
 	var gammaInBinary string
 	for i := 0; i < len(diagnostics[0]); i++ {
-		var nOfOnes int
-		var nOfZeros int
-		for j := 0; j < len(diagnostics); j++ {
-			numberAtPosition := diagnostics[j][i]
-			switch numberAtPosition {
-			case 0:
-				nOfZeros++
-			case 1:
-				nOfOnes++
-			default:
-				errMsg := fmt.Sprintf("Invalid number: %d at position (%d, %d)\n", numberAtPosition, i, j)
-				return "", errors.New(errMsg)
-			}
+		mostCommon, err := getCommonBitInColumn(diagnostics, i, most)
+		if err != nil {
+			return "", err
 		}
-		if nOfOnes > nOfZeros {
-			gammaInBinary += "0"
-		} else {
-			gammaInBinary += "1"
-		}
+		gammaInBinary += strconv.Itoa(mostCommon)
 	}
 	return gammaInBinary, nil
+}
+
+func getCommonBitInColumn(diagnostics [][]int, i int, typeOfCommon rating) (int, error) {
+	var nOfOnes int
+	var nOfZeros int
+	for j := 0; j < len(diagnostics); j++ {
+		numberAtPosition := diagnostics[j][i]
+		switch numberAtPosition {
+		case 0:
+			nOfZeros++
+		case 1:
+			nOfOnes++
+		default:
+			errMsg := fmt.Sprintf("Invalid number: %d at position (%d, %d)\n", numberAtPosition, i, j)
+			return -2000, errors.New(errMsg)
+		}
+	}
+	switch typeOfCommon {
+	case most:
+		if nOfOnes >= nOfZeros {
+			return 1, nil
+		} else {
+			return 0, nil
+		}
+	case least:
+		if nOfOnes >= nOfZeros {
+			return 0, nil
+		} else {
+			return 1, nil
+		}
+	default:
+		return 1, nil
+	}
 }
 
 func calculateEpsilonRateInBinaryForm(gammaRateInBinary string) (string, error) {
@@ -123,3 +155,65 @@ func calculateEpsilonRateInBinaryForm(gammaRateInBinary string) (string, error) 
 	}
 	return epsilonInBinary, nil
 }
+
+func calculateOxygenAndCo2Rating(diagnostics [][]int) (int64, int64, error) {
+	oxygenRatingInBinary, err := calculateComplexRating(diagnostics, most)
+	if err != nil {
+		return -2000, -2000, err
+	}
+	co2RatingInBinary, err := calculateComplexRating(diagnostics, least)
+	if err != nil {
+		return -2000, -2000, err
+	}
+	oxygenRatingInDecimal, err := strconv.ParseInt(oxygenRatingInBinary, 2, 64)
+	if err != nil {
+		return -2000, -2000, err
+	}
+	co2RatingInDecimal, err := strconv.ParseInt(co2RatingInBinary, 2, 64)
+	if err != nil {
+		return -2000, -2000, err
+	}
+	return oxygenRatingInDecimal, co2RatingInDecimal, nil
+}
+
+func calculateComplexRating(diagnostics [][]int, typeOfCommon rating) (string, error) {
+	reducedDiagnostics := diagnostics
+	for i := 0; i < len(diagnostics[0]); i++ {
+		common, err := getCommonBitInColumn(reducedDiagnostics, i, typeOfCommon)
+		if err != nil {
+			return "", err
+		}
+		reducedDiagnostics = eliminateDiagnosticsWithDifferentBitInColumn(reducedDiagnostics, common, i)
+	}
+
+	return getRatingInBinary(reducedDiagnostics[0]), nil
+}
+
+func eliminateDiagnosticsWithDifferentBitInColumn(diagnostics [][]int, mostCommon int, index int) [][]int {
+	if len(diagnostics) == 1 {
+		return diagnostics
+	}
+	var reducedDiagnostics [][]int
+	for i := 0; i < len(diagnostics); i++ {
+		if diagnostics[i][index] == mostCommon {
+			reducedDiagnostics = append(reducedDiagnostics, diagnostics[i])
+		}
+	}
+
+	return reducedDiagnostics
+}
+
+func getRatingInBinary(diagnostic []int) string {
+	var diagnosticInBinary string
+	for _, number := range diagnostic {
+		diagnosticInBinary += strconv.Itoa(number)
+	}
+	return diagnosticInBinary
+}
+
+type rating int
+
+const (
+	most rating = iota
+	least
+)
